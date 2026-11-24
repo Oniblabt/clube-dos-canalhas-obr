@@ -42,6 +42,25 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pista .x { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,.7); color: var(--ink);
     border: 0; border-radius: 3px; width: 22px; height: 22px; cursor: pointer; font-size: 14px; line-height: 1; }
+  .painel { padding: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line); }
+  .painel input { background: var(--bg); color: var(--ink); border: 1px solid var(--line); padding: 7px 8px;
+    font: 13px Georgia, serif; border-radius: 3px; min-width: 0; }
+  .rot { font-size: 12px; color: var(--quiet); margin-bottom: -6px; }
+  .rot span { opacity: .7; }
+  .bloco { border: 1px solid var(--line); border-radius: 3px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--panel); }
+  .titulo { font: 600 12px Georgia, serif; letter-spacing: 1px; text-transform: uppercase; color: var(--quiet); }
+  .linha { display: flex; gap: 6px; align-items: center; }
+  .linha label { display: flex; flex-direction: column; font-size: 11px; color: var(--quiet); gap: 2px; }
+  .linha label input { width: 70px; }
+  .linha > input { flex: 1; }
+  .linha .btn { margin-left: auto; align-self: flex-end; }
+  .mini { font-size: 11.5px; color: var(--quiet); }
+  .check { font-size: 12.5px; color: var(--quiet); display: flex; gap: 6px; align-items: center; }
+  .historico { flex: 1; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .rol { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 3px; padding: 6px 8px; font-size: 13px; }
+  .rol .quem { color: var(--quiet); font-size: 11.5px; }
+  .rol .total { font: 700 18px Georgia, serif; float: right; margin-left: 8px; }
+  .rol.oculta { border-left-color: var(--quiet); opacity: .8; }
   .grande { flex: 1; display: flex; align-items: center; justify-content: center; background: #0d0c0b; overflow: auto; }
   .grande img { max-width: 100%; max-height: 100%; }
 </style>
@@ -49,7 +68,7 @@
 <body>
 <header id="abas">
   <button data-aba="ficha" class="on">Ficha</button>
-  <button data-aba="discord">Discord</button>
+  <button data-aba="dados">Dados</button>
   <button data-aba="pistas">Pistas</button>
 </header>
 <main>
@@ -69,14 +88,51 @@
     <div class="dica">Se a ficha ficar em branco, o site não permite ser aberto aqui dentro: use o botão ↗.</div>
   </section>
 
-  <!-- DISCORD -->
-  <section id="discord">
-    <iframe id="frameDiscord"></iframe>
-    <div class="dica">Mostra quem está online e o canal de voz. O botão de entrar abre o Discord.</div>
+  <!-- DADOS -->
+  <section id="dados">
+    <div class="painel">
+      <label class="rot">O que está rolando <span>(opcional)</span></label>
+      <input id="nomeRolagem" placeholder="Ex.: Percepção, Ataque com faca, Dano">
+
+      <div class="bloco">
+        <div class="titulo">Teste de perícia</div>
+        <div class="linha">
+          <label>Atributo <input id="atributo" type="number" value="1" min="-2" max="10"></label>
+          <label>Bônus <input id="bonus" type="number" value="0"></label>
+          <button class="btn red" id="rolarTeste">Rolar teste</button>
+        </div>
+        <div class="mini">Rola um d20 por ponto de atributo e fica com o maior. Atributo 0 rola 2d20 e fica com o menor.</div>
+      </div>
+
+      <div class="bloco">
+        <div class="titulo">Rolagem livre</div>
+        <div class="linha">
+          <input id="expressao" placeholder="Ex.: 2d6+3, 1d8+1d6, 3d20">
+          <button class="btn red" id="rolarLivre">Rolar</button>
+        </div>
+      </div>
+
+      <label class="check" id="linhaOculta" hidden><input type="checkbox" id="oculta"> Rolagem oculta (só eu vejo, não vai pro Discord)</label>
+
+      <div class="bloco" id="configDiscord" hidden>
+        <div class="titulo">Discord (só o mestre vê)</div>
+        <div class="linha">
+          <input id="webhook" type="password" placeholder="Cole o link do webhook do #rolagens">
+          <button class="btn" id="salvarWebhook">Salvar</button>
+        </div>
+        <div class="mini" id="estadoWebhook"></div>
+      </div>
+    </div>
+    <div class="historico" id="historico"></div>
+    <div class="dica" id="dicaDados"></div>
   </section>
 
   <!-- PISTAS -->
   <section id="pistas">
+    <div class="bar" id="barraPistas" hidden>
+      <button class="btn red" id="enviarSelecionadas">Enviar imagens selecionadas</button>
+      <span class="mini">Selecione as imagens na cena (clique ou arraste uma caixa) e clique aqui.</span>
+    </div>
     <div class="grade" id="grade"></div>
     <div class="dica" id="dicaPistas">Clique numa pista para ampliar.</div>
   </section>
@@ -202,11 +258,121 @@
       OBR.party.onChange(atualizaLista);
     }
 
-    // ---------- DISCORD ----------
+    // ---------- DADOS ----------
+    const meuNome = await OBR.player.getName();
+    if (souMestre) { $("configDiscord").hidden = false; $("linhaOculta").hidden = false; }
+
+    const d = (lados) => 1 + Math.floor(Math.random() * lados);
+
+    // "2d6+1d8-1+3" -> partes
+    function rolaExpressao(txt) {
+      const limpo = txt.replace(/\s+/g, "").toLowerCase();
+      if (!/^[+-]?(\d*d\d+|\d+)([+-](\d*d\d+|\d+))*$/.test(limpo)) return null;
+      const partes = limpo.match(/[+-]?(\d*d\d+|\d+)/g);
+      let total = 0; const desc = [];
+      for (const p of partes) {
+        const sinal = p.startsWith("-") ? -1 : 1;
+        const corpo = p.replace(/^[+-]/, "");
+        if (corpo.includes("d")) {
+          let [q, l] = corpo.split("d").map(Number);
+          q = q || 1;
+          if (q > 50 || l < 2 || l > 1000) return null;
+          const r = Array.from({ length: q }, () => d(l));
+          const soma = r.reduce((a, b) => a + b, 0);
+          total += sinal * soma;
+          desc.push(`${sinal < 0 ? "−" : desc.length ? "+" : ""}${q}d${l} [${r.join(", ")}]`);
+        } else {
+          total += sinal * Number(corpo);
+          desc.push(`${sinal < 0 ? "−" : "+"}${corpo}`);
+        }
+      }
+      return { total, desc: desc.join(" ") };
+    }
+
+    function rolaTeste(atr, bonus) {
+      const pior = atr <= 0;
+      const q = pior ? 2 + Math.abs(atr) : atr;
+      const r = Array.from({ length: Math.min(q, 20) }, () => d(20));
+      const escolhido = pior ? Math.min(...r) : Math.max(...r);
+      const total = escolhido + bonus;
+      const b = bonus ? ` ${bonus > 0 ? "+" : "−"} ${Math.abs(bonus)}` : "";
+      return { total, desc: `${r.length}d20 [${r.join(", ")}] → ${pior ? "menor" : "maior"} ${escolhido}${b}`, nat: escolhido };
+    }
+
+    const historico = [];
+    function mostraRolagem(rol) {
+      historico.unshift(rol);
+      historico.length = Math.min(historico.length, 30);
+      const h = $("historico");
+      h.innerHTML = "";
+      historico.forEach((x) => {
+        const el = document.createElement("div");
+        el.className = "rol" + (x.oculta ? " oculta" : "");
+        const tot = document.createElement("span"); tot.className = "total"; tot.textContent = x.total;
+        const quem = document.createElement("div"); quem.className = "quem";
+        quem.textContent = `${x.quem}${x.nome ? " · " + x.nome : ""}${x.oculta ? " · oculta" : ""}`;
+        const det = document.createElement("div"); det.textContent = x.desc;
+        el.append(tot, quem, det);
+        h.appendChild(el);
+      });
+    }
+
+    async function mandaDiscord(rol) {
+      const m = await OBR.room.getMetadata();
+      const url = m[K_DISCORD] && m[K_DISCORD].webhook;
+      if (!url) return "sem";
+      const texto = `${rol.nome ? `**${rol.nome}**: ` : ""}${rol.desc.replace(/\[/g, "`[").replace(/\]/g, "]`")}  =  **${rol.total}**`;
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: rol.quem, content: texto, allowed_mentions: { parse: [] } }),
+        });
+        return resp.ok ? "ok" : "erro";
+      } catch { return "erro"; }
+    }
+
+    async function publica(base) {
+      const rol = { ...base, quem: meuNome, nome: $("nomeRolagem").value.trim(), oculta: souMestre && $("oculta").checked };
+      mostraRolagem(rol);
+      if (rol.oculta) return;
+      OBR.broadcast.sendMessage(`${ID}/rolagem`, rol, { destination: "REMOTE" });
+      const r = await mandaDiscord(rol);
+      if (r === "erro") OBR.notification.show("Não consegui mandar pro Discord. Confira o webhook.", "WARNING");
+    }
+
+    OBR.broadcast.onMessage(`${ID}/rolagem`, (ev) => {
+      const rol = ev.data;
+      mostraRolagem(rol);
+      OBR.notification.show(`${rol.quem}${rol.nome ? " (" + rol.nome + ")" : ""}: ${rol.total}`);
+    });
+
+    $("rolarTeste").addEventListener("click", () => {
+      const atr = parseInt($("atributo").value, 10) || 0;
+      const bonus = parseInt($("bonus").value, 10) || 0;
+      publica(rolaTeste(atr, bonus));
+    });
+    $("rolarLivre").addEventListener("click", () => {
+      const r = rolaExpressao($("expressao").value);
+      if (!r) { OBR.notification.show("Não entendi essa rolagem. Use algo como 2d6+3.", "WARNING"); return; }
+      publica(r);
+    });
+    $("expressao").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rolarLivre").click(); });
+
+    $("salvarWebhook").addEventListener("click", async () => {
+      const u = $("webhook").value.trim();
+      if (u && !/^https:\/\/(discord|discordapp)\.com\/api\/webhooks\//.test(u)) {
+        OBR.notification.show("Isso não parece um link de webhook do Discord.", "WARNING"); return;
+      }
+      await OBR.room.setMetadata({ [K_DISCORD]: { webhook: u } });
+      $("webhook").value = "";
+      OBR.notification.show(u ? "Webhook salvo. As rolagens vão pro Discord." : "Webhook removido.");
+    });
+
     const aplicaDiscord = (meta) => {
-      const id = (meta[K_DISCORD] && meta[K_DISCORD].servidor) || SERVIDOR_PADRAO;
-      const src = `https://discord.com/widget?id=${id}&theme=dark`;
-      if ($("frameDiscord").src !== src) $("frameDiscord").src = src;
+      const tem = !!(meta[K_DISCORD] && meta[K_DISCORD].webhook);
+      $("estadoWebhook").textContent = tem ? "Conectado: as rolagens vão pro #rolagens." : "Sem webhook: as rolagens ficam só no Owlbear.";
+      $("dicaDados").textContent = tem ? "Todo mundo na mesa vê as rolagens, e elas também vão pro Discord." : "Todo mundo na mesa vê as rolagens.";
     };
 
     // ---------- PISTAS ----------
@@ -216,7 +382,7 @@
       grade.innerHTML = "";
       if (!lista.length) {
         grade.innerHTML = souMestre
-          ? `<div class="vazio" style="grid-column:1/-1">Nenhuma pista enviada ainda.<br>No quadro de pistas, clique com o <b>botão direito</b> numa imagem e escolha <b>Enviar para Pistas</b>.</div>`
+          ? `<div class="vazio" style="grid-column:1/-1">Nenhuma pista enviada ainda.<br>Selecione imagens na cena e clique em <b>Enviar imagens selecionadas</b>, ou clique com o botão direito numa imagem e use o ícone da maleta.</div>`
           : `<div class="vazio" style="grid-column:1/-1">Nenhuma pista encontrada ainda.</div>`;
         return;
       }
@@ -249,6 +415,26 @@
         grade.appendChild(card);
       });
     };
+
+    if (souMestre) {
+      $("barraPistas").hidden = false;
+      $("enviarSelecionadas").addEventListener("click", async () => {
+        const sel = await OBR.player.getSelection();
+        if (!sel || !sel.length) { OBR.notification.show("Selecione uma ou mais imagens na cena primeiro.", "WARNING"); return; }
+        const itens = await OBR.scene.items.getItems(sel);
+        const m = await OBR.room.getMetadata();
+        const lista = Array.isArray(m[K_PISTAS]) ? m[K_PISTAS] : [];
+        let novas = 0;
+        for (const it of itens) {
+          const url = it.image && it.image.url;
+          if (!url || lista.some((p) => p.url === url)) continue;
+          lista.push({ id: it.id, url, nome: it.name || "Pista", em: Date.now() });
+          novas++;
+        }
+        await OBR.room.setMetadata({ [K_PISTAS]: lista });
+        OBR.notification.show(novas ? `${novas} pista(s) enviada(s) pros jogadores.` : "Nenhuma imagem nova na seleção.");
+      });
+    }
 
     const meta = await OBR.room.getMetadata();
     aplicaDiscord(meta);
