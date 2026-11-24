@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clube dos Canalhas</title>
+<style>
+  :root {
+    --bg: #141210; --panel: #1d1a17; --line: #3a332c; --ink: #e9e4d8;
+    --quiet: #a39a8c; --red: #b3261e; --paper: #e9e2cf;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 Georgia, "Times New Roman", serif; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header button { flex: 1; background: none; border: 0; color: var(--quiet); padding: 11px 6px;
+    font: 600 13px/1 Georgia, serif; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+    border-bottom: 2px solid transparent; }
+  header button.on { color: var(--ink); border-bottom-color: var(--red); }
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  section { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  section.on { display: flex; }
+  .bar { display: flex; gap: 6px; padding: 8px; align-items: center; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .bar input, .bar select { flex: 1; min-width: 0; background: var(--bg); color: var(--ink);
+    border: 1px solid var(--line); padding: 7px 8px; font: 13px Georgia, serif; border-radius: 3px; }
+  .btn { background: #2a251f; color: var(--ink); border: 1px solid var(--line); padding: 7px 10px;
+    font: 13px Georgia, serif; border-radius: 3px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+  .btn:hover { border-color: var(--quiet); }
+  .btn.red { background: var(--red); border-color: var(--red); }
+  iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+  .vazio { padding: 24px 18px; color: var(--quiet); text-align: center; }
+  .vazio b { color: var(--ink); }
+  .dica { font-size: 12px; color: var(--quiet); padding: 6px 10px; border-top: 1px solid var(--line); }
+  .grade { flex: 1; overflow-y: auto; padding: 10px; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; align-content: start; }
+  .pista { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 6px;
+    cursor: zoom-in; position: relative; }
+  .pista img { width: 100%; height: 120px; object-fit: contain; display: block; background: #0d0c0b; }
+  .pista span { display: block; font-size: 12px; color: var(--quiet); margin-top: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pista .x { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,.7); color: var(--ink);
+    border: 0; border-radius: 3px; width: 22px; height: 22px; cursor: pointer; font-size: 14px; line-height: 1; }
+  .grande { flex: 1; display: flex; align-items: center; justify-content: center; background: #0d0c0b; overflow: auto; }
+  .grande img { max-width: 100%; max-height: 100%; }
+</style>
+</head>
+<body>
+<header id="abas">
+  <button data-aba="ficha" class="on">Ficha</button>
+  <button data-aba="discord">Discord</button>
+  <button data-aba="pistas">Pistas</button>
+</header>
+<main>
+  <!-- FICHA -->
+  <section id="ficha" class="on">
+    <div class="bar" id="barraMestre" hidden>
+      <select id="escolhaJogador"></select>
+    </div>
+    <div class="bar">
+      <input id="urlFicha" placeholder="Cole aqui o link da sua ficha no C.R.I.S.">
+      <button class="btn" id="salvarFicha">Salvar</button>
+      <button class="btn" id="grandeFicha" title="Abrir grande dentro do Owlbear">Ampliar</button>
+      <a class="btn" id="abaFicha" target="_blank" rel="noopener" title="Abrir em uma aba nova">↗</a>
+    </div>
+    <div class="vazio" id="fichaVazia">Cole o link da sua ficha do <b>C.R.I.S.</b> acima e clique em <b>Salvar</b>.<br>Ele fica guardado neste navegador e o mestre também consegue ver.</div>
+    <iframe id="frameFicha" hidden allow="clipboard-read; clipboard-write"></iframe>
+    <div class="dica">Se a ficha ficar em branco, o site não permite ser aberto aqui dentro: use o botão ↗.</div>
+  </section>
+
+  <!-- DISCORD -->
+  <section id="discord">
+    <iframe id="frameDiscord"></iframe>
+    <div class="dica">Mostra quem está online e o canal de voz. O botão de entrar abre o Discord.</div>
+  </section>
+
+  <!-- PISTAS -->
+  <section id="pistas">
+    <div class="grade" id="grade"></div>
+    <div class="dica" id="dicaPistas">Clique numa pista para ampliar.</div>
+  </section>
+
+  <!-- VISUALIZAÇÃO GRANDE (modal) -->
+  <section id="grandeVista">
+    <div class="grande"><img id="imgGrande" alt=""></div>
+  </section>
+</main>
+
+<script type="module">
+  import OBR from "https://esm.sh/@owlbear-rodeo/sdk";
+
+  const ID = "br.clubedoscanalhas";
+  const K_PISTAS = `${ID}/pistas`;
+  const K_DISCORD = `${ID}/discord`;
+  const K_FICHA = `${ID}/ficha`;
+  const SERVIDOR_PADRAO = "1574834527803809933";
+  const BASE = "https://oniblabt.github.io/clube-dos-canalhas-obr/";
+
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+
+  // Guardar no navegador, sem quebrar onde o storage não funciona.
+  const guarda = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  // Modo "visualização grande" aberto como modal.
+  if (params.get("view")) {
+    $("abas").hidden = true;
+    document.querySelectorAll("section").forEach((s) => s.classList.remove("on"));
+    if (params.get("view") === "ficha") {
+      $("ficha").classList.add("on");
+      document.querySelectorAll("#ficha .bar, #fichaVazia, #ficha .dica").forEach((e) => (e.hidden = true));
+      $("frameFicha").hidden = false;
+      $("frameFicha").src = params.get("url");
+    } else {
+      $("grandeVista").classList.add("on");
+      $("imgGrande").src = params.get("url");
+    }
+  }
+
+  // Abas
+  document.querySelectorAll("#abas button").forEach((b) =>
+    b.addEventListener("click", () => {
+      document.querySelectorAll("#abas button").forEach((x) => x.classList.toggle("on", x === b));
+      document.querySelectorAll("main > section").forEach((s) => s.classList.toggle("on", s.id === b.dataset.aba));
+    })
+  );
+
+  function mostraFicha(url) {
+    const tem = !!url;
+    $("fichaVazia").hidden = tem;
+    $("frameFicha").hidden = !tem;
+    if (tem && $("frameFicha").src !== url) $("frameFicha").src = url;
+    $("abaFicha").href = url || "#";
+  }
+
+  function urlValida(u) {
+    try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:"; } catch { return false; }
+  }
+
+  OBR.onReady(async () => {
+    if (params.get("view")) return;
+
+    const papel = await OBR.player.getRole();
+    const souMestre = papel === "GM";
+    const chaveLocal = `${ID}:ficha:${OBR.room.id}`;
+
+    // ---------- FICHA ----------
+    let minhaFicha = guarda.get(chaveLocal) || ((await OBR.player.getMetadata())[K_FICHA] || "");
+    if (minhaFicha) {
+      $("urlFicha").value = minhaFicha;
+      await OBR.player.setMetadata({ [K_FICHA]: minhaFicha });
+    }
+    mostraFicha(minhaFicha);
+
+    $("salvarFicha").addEventListener("click", async () => {
+      const u = $("urlFicha").value.trim();
+      if (u && !urlValida(u)) { OBR.notification.show("Esse link não parece válido."); return; }
+      minhaFicha = u;
+      guarda.set(chaveLocal, u);
+      await OBR.player.setMetadata({ [K_FICHA]: u });
+      if (!souMestre || $("escolhaJogador").value === "eu") mostraFicha(u);
+      OBR.notification.show(u ? "Ficha salva." : "Ficha removida.");
+    });
+
+    $("grandeFicha").addEventListener("click", () => {
+      const u = $("frameFicha").src;
+      if (!u || $("frameFicha").hidden) return;
+      OBR.modal.open({
+        id: `${ID}/ficha-grande`,
+        url: `${BASE}index.html?view=ficha&url=${encodeURIComponent(u)}`,
+        width: 1100, height: 900,
+      });
+    });
+
+    // Mestre: escolhe ver a própria ficha ou a de um jogador.
+    if (souMestre) {
+      $("barraMestre").hidden = false;
+      const atualizaLista = (jogadores) => {
+        const sel = $("escolhaJogador");
+        const atual = sel.value || "eu";
+        sel.innerHTML = "";
+        const op = (v, t) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); };
+        op("eu", "Minha ficha");
+        jogadores.forEach((p) => op(p.id, `${p.name}${p.metadata[K_FICHA] ? "" : " (sem ficha)"}`));
+        sel.value = [...sel.options].some((o) => o.value === atual) ? atual : "eu";
+        sel.dataset.jogadores = JSON.stringify(jogadores.map((p) => ({ id: p.id, url: p.metadata[K_FICHA] || "" })));
+        aplicaEscolha();
+      };
+      const aplicaEscolha = () => {
+        const sel = $("escolhaJogador");
+        if (sel.value === "eu") { mostraFicha(minhaFicha); return; }
+        const lista = JSON.parse(sel.dataset.jogadores || "[]");
+        const j = lista.find((p) => p.id === sel.value);
+        mostraFicha(j ? j.url : "");
+      };
+      $("escolhaJogador").addEventListener("change", aplicaEscolha);
+      atualizaLista(await OBR.party.getPlayers());
+      OBR.party.onChange(atualizaLista);
+    }
+
+    // ---------- DISCORD ----------
+    const aplicaDiscord = (meta) => {
+      const id = (meta[K_DISCORD] && meta[K_DISCORD].servidor) || SERVIDOR_PADRAO;
+      const src = `https://discord.com/widget?id=${id}&theme=dark`;
+      if ($("frameDiscord").src !== src) $("frameDiscord").src = src;
+    };
+
+    // ---------- PISTAS ----------
+    const desenhaPistas = (meta) => {
+      const lista = Array.isArray(meta[K_PISTAS]) ? meta[K_PISTAS] : [];
+      const grade = $("grade");
+      grade.innerHTML = "";
+      if (!lista.length) {
+        grade.innerHTML = souMestre
+          ? `<div class="vazio" style="grid-column:1/-1">Nenhuma pista enviada ainda.<br>No quadro de pistas, clique com o <b>botão direito</b> numa imagem e escolha <b>Enviar para Pistas</b>.</div>`
+          : `<div class="vazio" style="grid-column:1/-1">Nenhuma pista encontrada ainda.</div>`;
+        return;
+      }
+      lista.forEach((p) => {
+        const card = document.createElement("div");
+        card.className = "pista";
+        const img = document.createElement("img");
+        img.src = p.url; img.alt = p.nome; img.loading = "lazy";
+        const nome = document.createElement("span");
+        nome.textContent = p.nome;
+        card.append(img, nome);
+        card.addEventListener("click", () =>
+          OBR.modal.open({
+            id: `${ID}/pista-grande`,
+            url: `${BASE}index.html?view=pista&url=${encodeURIComponent(p.url)}`,
+            width: 1000, height: 900,
+          })
+        );
+        if (souMestre) {
+          const x = document.createElement("button");
+          x.className = "x"; x.textContent = "×"; x.title = "Tirar do quadro dos jogadores";
+          x.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            const m = await OBR.room.getMetadata();
+            const nova = (m[K_PISTAS] || []).filter((q) => q.url !== p.url);
+            await OBR.room.setMetadata({ [K_PISTAS]: nova });
+          });
+          card.appendChild(x);
+        }
+        grade.appendChild(card);
+      });
+    };
+
+    const meta = await OBR.room.getMetadata();
+    aplicaDiscord(meta);
+    desenhaPistas(meta);
+    OBR.room.onMetadataChange((m) => { aplicaDiscord(m); desenhaPistas(m); });
+  });
+</script>
+</body>
+</html>

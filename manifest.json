@@ -1,0 +1,17 @@
+{
+  "manifest_version": 1,
+  "name": "Clube dos Canalhas",
+  "version": "1.0.0",
+  "description": "Ficha do C.R.I.S., widget do Discord e quadro de pistas num painel só.",
+  "author": "Oniblabt",
+  "homepage_url": "https://oniblabt.github.io/clube-dos-canalhas-obr/",
+  "icon": "https://oniblabt.github.io/clube-dos-canalhas-obr/icon.svg",
+  "background_url": "https://oniblabt.github.io/clube-dos-canalhas-obr/background.html",
+  "action": {
+    "title": "Clube dos Canalhas",
+    "icon": "https://oniblabt.github.io/clube-dos-canalhas-obr/icon.svg",
+    "popover": "https://oniblabt.github.io/clube-dos-canalhas-obr/index.html",
+    "width": 480,
+    "height": 720
+  }
+}

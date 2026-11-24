@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Clube dos Canalhas (fundo)</title></head>
+<body>
+<script type="module">
+  import OBR from "https://esm.sh/@owlbear-rodeo/sdk";
+
+  const ID = "br.clubedoscanalhas";
+  const KEY = `${ID}/pistas`;
+  const BASE = "https://oniblabt.github.io/clube-dos-canalhas-obr/";
+
+  OBR.onReady(() => {
+    // Botão direito numa imagem (só o mestre vê): manda a imagem pra aba Pistas.
+    OBR.contextMenu.create({
+      id: `${ID}/enviar-pista`,
+      icons: [
+        {
+          icon: BASE + "icon.svg",
+          label: "Enviar para Pistas",
+          filter: { roles: ["GM"], every: [{ key: "type", value: "IMAGE" }] },
+        },
+      ],
+      async onClick(context) {
+        const meta = await OBR.room.getMetadata();
+        const lista = Array.isArray(meta[KEY]) ? meta[KEY] : [];
+        let novas = 0;
+        for (const item of context.items) {
+          const url = item.image && item.image.url;
+          if (!url || lista.some((p) => p.url === url)) continue;
+          lista.push({ id: item.id, url, nome: item.name || "Pista", em: Date.now() });
+          novas++;
+        }
+        await OBR.room.setMetadata({ [KEY]: lista });
+        OBR.notification.show(
+          novas ? `${novas} pista(s) enviada(s) pro quadro dos jogadores.` : "Essa pista já estava no quadro."
+        );
+      },
+    });
+  });
+</script>
+</body>
+</html>
